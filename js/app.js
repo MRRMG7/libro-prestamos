@@ -18,10 +18,17 @@ import {
   writeBatch,
   enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { firebaseConfig } from "./firebase-config.js";
 
 const firebaseApp = initializeApp(firebaseConfig);
 const dbFs = getFirestore(firebaseApp);
+const auth = getAuth(firebaseApp);
 
 // Permite seguir viendo los datos aunque se pierda la conexión un momento.
 enableIndexedDbPersistence(dbFs).catch(() => { /* varias pestañas abiertas: se ignora */ });
@@ -51,6 +58,45 @@ setEstadoSync("Conectando…", true);
 window.addEventListener("offline", () => setEstadoSync("Sin conexión — se sincroniza al volver", false));
 window.addEventListener("online", () => setEstadoSync("Conectado", true));
 
+/* ---------- Acceso: solo la familia entra ---------- */
+onAuthStateChanged(auth, user => {
+  const loginScreen = document.getElementById("login-screen");
+  const appRoot = document.getElementById("app-root");
+  const btnLogout = document.getElementById("btn-logout");
+
+  if (user) {
+    loginScreen.style.display = "none";
+    appRoot.hidden = false;
+    btnLogout.hidden = false;
+  } else {
+    loginScreen.style.display = "flex";
+    appRoot.hidden = true;
+    btnLogout.hidden = true;
+  }
+});
+
+document.getElementById("btn-login").addEventListener("click", async () => {
+  const email = document.getElementById("login-email").value.trim();
+  const password = document.getElementById("login-password").value;
+  const errorEl = document.getElementById("login-error");
+  errorEl.hidden = true;
+
+  if (!email || !password) return;
+
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+  } catch (e) {
+    errorEl.textContent = "Correo o contraseña incorrectos.";
+    errorEl.hidden = false;
+  }
+});
+
+document.getElementById("login-password").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("btn-login").click();
+});
+
+document.getElementById("btn-logout").addEventListener("click", () => signOut(auth));
+
 /* ---------- Cálculo de interés ---------- */
 // El interés de un mes siempre es el mes completo sobre el capital
 // que esté pendiente en ese momento (sin prorratear por días).
@@ -65,14 +111,12 @@ function interesDelMes(prestamo) {
    ========================================================= */
 onSnapshot(collection(dbFs, "clientes"), snap => {
   db.clientes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
   if (navigator.onLine) {
     setEstadoSync("Conectado", true);
   } else {
     setEstadoSync("Sin conexión — mostrando la última copia", false);
   }
   renderClientes();
-   
 }, err => {
   console.error(err);
   setEstadoSync("Error de conexión con Firebase (revisá firebase-config.js)", false);

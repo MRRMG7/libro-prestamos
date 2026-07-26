@@ -65,6 +65,41 @@ Esta app usa **Firebase Firestore** (plan gratuito, no pide tarjeta) como base d
 
 Aunque ahora los datos viven en la nube, la pestaña **Datos → Exportar datos** sigue sirviendo como respaldo por si algún día alguien borra algo por error.
 
+## Cerrar el acceso a quien no sea de la familia (login con contraseña)
+
+Si ya le compartiste el link a alguien más (amigos, etc.) y ahora querés que **solo vos, mamá y papá** puedan entrar, hay que activar el login y cambiar las reglas de Firestore. Así, cualquiera sin la clave solo ve una pantalla de acceso, sin ver ni tocar ningún dato.
+
+### 1. Activar el método de acceso en Firebase
+
+1. En la consola de Firebase de tu proyecto → menú lateral → **Compilación → Authentication**.
+2. **Comenzar / Get started**.
+3. En la lista de proveedores, elegí **Correo electrónico/contraseña (Email/Password)** → activalo (el primer interruptor) → **Guardar**.
+
+### 2. Crear la clave de acceso para la familia
+
+1. Dentro de **Authentication**, pestaña **Users** → **Add user**.
+2. Poné un correo (no hace falta que sea uno real que revisen, solo sirve como usuario — ej. `familia@libroprestamos.com`) y una contraseña que puedan recordar los 3 → **Add user**.
+3. Esa misma clave se la compartís a vos, mamá y papá para entrar desde cualquier celular. (Si preferís que cada uno tenga su propia clave en vez de una compartida, repetís este paso creando un usuario más por persona.)
+
+### 3. Cambiar las reglas de Firestore para exigir el login
+
+1. **Compilación → Firestore Database → Rules**.
+2. Reemplazá las reglas por estas (ahora exigen haber iniciado sesión):
+
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /{document=**} {
+         allow read, write: if request.auth != null;
+       }
+     }
+   }
+   ```
+3. **Publish**.
+
+Desde ese momento, cualquiera que abra el link (tus amigos incluidos) solo va a ver la pantalla de acceso pidiendo correo y contraseña, y sin la clave no pueden ver ni modificar nada. Vos, mamá y papá entran una vez con la clave desde cada celular y el navegador los mantiene conectados (no hay que volver a escribirla cada vez, salvo que le den a "Cerrar sesión" o borren los datos del navegador).
+
 ## Estructura de archivos
 
 ```

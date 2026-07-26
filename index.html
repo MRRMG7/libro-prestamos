@@ -10,7 +10,25 @@
 </head>
 <body>
 
-<div class="app">
+<!-- ===== PANTALLA DE ACCESO ===== -->
+<div class="login-screen" id="login-screen">
+  <div class="login-box">
+    <span class="cover-eyebrow">Cuenta al día</span>
+    <h1 class="cover-title" style="color:#202B23;">Libro de Préstamos</h1>
+    <p class="hint">Acceso solo para la familia.</p>
+    <label>Correo
+      <input type="email" id="login-email" placeholder="tu-correo@ejemplo.com" autocomplete="username">
+    </label>
+    <label>Contraseña
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+    </label>
+    <p class="login-error" id="login-error" hidden></p>
+    <button class="btn btn-primary" id="btn-login">Entrar</button>
+  </div>
+</div>
+
+<div class="app" id="app-root" hidden>
+
 
   <header class="cover">
     <div class="cover-inner">
@@ -18,6 +36,7 @@
       <h1 class="cover-title">Libro de Préstamos</h1>
       <p class="cover-sub">Capital, interés y abonos — todo en un solo lugar.</p>
       <p class="cover-sync" id="sync-status">Conectando…</p>
+      <button class="btn-logout" id="btn-logout" hidden>Cerrar sesión</button>
     </div>
     <div class="cover-totals" id="cover-totals">
       <div class="total-box">

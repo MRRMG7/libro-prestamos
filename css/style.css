@@ -32,6 +32,47 @@ html, body {
   padding: 0 0 60px;
 }
 
+/* ===== LOGIN ===== */
+.login-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+.login-box {
+  background: var(--paper-raised);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.login-box .cover-title { margin: 2px 0 0; font-size: 26px; }
+.login-error {
+  color: var(--brick);
+  font-size: 13px;
+  margin: 0;
+}
+.btn-logout {
+  position: relative;
+  margin-top: 10px;
+  background: transparent;
+  border: 1px solid rgba(245,247,240,0.3);
+  color: #C6CCBE;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.btn-logout:hover { background: rgba(245,247,240,0.08); }
+
 /* ===== COVER ===== */
 .cover {
   background: var(--ink);
