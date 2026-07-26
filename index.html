@@ -17,6 +17,7 @@
       <span class="cover-eyebrow">Cuenta al día</span>
       <h1 class="cover-title">Libro de Préstamos</h1>
       <p class="cover-sub">Capital, interés y abonos — todo en un solo lugar.</p>
+      <p class="cover-sync" id="sync-status">Conectando…</p>
     </div>
     <div class="cover-totals" id="cover-totals">
       <div class="total-box">
@@ -109,10 +110,9 @@
     </div>
     <div class="calc-card">
       <p class="hint">
-        Esta aplicación guarda todo en el navegador donde la usás (no hay servidor).
-        Si varias personas de la familia van a registrar pagos desde celulares distintos,
-        exportá el archivo después de cada actualización y compartilo (o importalo en el otro celular)
-        para que todos vean lo mismo.
+        Los datos se guardan en la nube (Firebase) y se sincronizan solos entre todos los
+        celulares y computadoras que abran este sitio — no hace falta pasarse archivos.
+        Exportá de vez en cuando como respaldo, por si algún día borran algo sin querer.
       </p>
       <div class="datos-actions">
         <button class="btn btn-primary" id="btn-exportar">Exportar datos (.json)</button>
@@ -210,6 +210,6 @@
   </div>
 </div>
 
-<script src="js/app.js"></script>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>

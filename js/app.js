@@ -1,28 +1,32 @@
 /* =========================================================
    Libro de Préstamos — lógica de la aplicación
-   Guarda todo en localStorage. Interés siempre se calcula
-   por mes completo sobre el CAPITAL PENDIENTE (no proporcional
-   a los días, y baja según los abonos a capital).
+   Los datos viven en Firebase Firestore (se sincronizan solos
+   entre todos los celulares/computadoras que abran el sitio).
+   Interés siempre se calcula por mes completo sobre el CAPITAL
+   PENDIENTE (no proporcional a los días, y baja según abonos).
    ========================================================= */
 
-const STORAGE_KEY = "libro-prestamos-v1";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  writeBatch,
+  enableIndexedDbPersistence
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
 
-let db = cargarDatos();
+const firebaseApp = initializeApp(firebaseConfig);
+const dbFs = getFirestore(firebaseApp);
 
-function cargarDatos() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { clientes: [], prestamos: [], pagos: [] };
-    return JSON.parse(raw);
-  } catch (e) {
-    console.error("Error leyendo datos:", e);
-    return { clientes: [], prestamos: [], pagos: [] };
-  }
-}
+// Permite seguir viendo los datos aunque se pierda la conexión un momento.
+enableIndexedDbPersistence(dbFs).catch(() => { /* varias pestañas abiertas: se ignora */ });
 
-function guardarDatos() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-}
+let db = { clientes: [], prestamos: [], pagos: [] };
 
 function nuevoId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -36,12 +40,53 @@ function hoyISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/* ---------- Estado de sincronización ---------- */
+function setEstadoSync(texto, ok) {
+  const el = document.getElementById("sync-status");
+  if (!el) return;
+  el.textContent = texto;
+  el.style.color = ok ? "#BFE3C9" : "#E3B3AE";
+}
+setEstadoSync("Conectando…", true);
+window.addEventListener("offline", () => setEstadoSync("Sin conexión — se sincroniza al volver", false));
+window.addEventListener("online", () => setEstadoSync("Conectado", true));
+
 /* ---------- Cálculo de interés ---------- */
 // El interés de un mes siempre es el mes completo sobre el capital
 // que esté pendiente en ese momento (sin prorratear por días).
 function interesDelMes(prestamo) {
   return prestamo.capitalPendiente * (prestamo.tasa / 100);
 }
+
+/* =========================================================
+   SUSCRIPCIONES EN TIEMPO REAL A FIRESTORE
+   Cualquier cambio (propio o de otro familiar) llega aquí y
+   se vuelve a dibujar la pantalla automáticamente.
+   ========================================================= */
+onSnapshot(collection(dbFs, "clientes"), snap => {
+  db.clientes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  setEstadoSync(snap.metadata.fromCache ? "Sin conexión — mostrando la última copia" : "Conectado", !snap.metadata.fromCache || navigator.onLine);
+  renderClientes();
+}, err => {
+  console.error(err);
+  setEstadoSync("Error de conexión con Firebase (revisá firebase-config.js)", false);
+});
+
+onSnapshot(collection(dbFs, "prestamos"), snap => {
+  db.prestamos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderClientes();
+});
+
+onSnapshot(collection(dbFs, "pagos"), snap => {
+  db.pagos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderClientes();
+  // si el modal de historial está abierto, lo refrescamos también
+  const modalHist = document.getElementById("modal-historial");
+  if (modalHist.classList.contains("open")) {
+    const prestamoId = modalHist.dataset.prestamoId;
+    if (prestamoId) pintarHistorial(prestamoId);
+  }
+});
 
 /* =========================================================
    NAVEGACIÓN DE TABS
@@ -109,6 +154,7 @@ function renderClientes() {
     `;
     const acciones = document.createElement("div");
     acciones.className = "cliente-acciones";
+
     const btnPrestar = document.createElement("button");
     btnPrestar.className = "btn btn-ghost btn-small";
     btnPrestar.textContent = "+ Préstamo";
@@ -203,13 +249,17 @@ document.getElementById("btn-nuevo-cliente").addEventListener("click", () => {
   abrirModal("modal-cliente");
 });
 
-document.getElementById("btn-guardar-cliente").addEventListener("click", () => {
+document.getElementById("btn-guardar-cliente").addEventListener("click", async () => {
   const nombre = document.getElementById("input-nombre-cliente").value.trim();
   if (!nombre) return;
-  db.clientes.push({ id: nuevoId(), nombre });
-  guardarDatos();
-  cerrarModal("modal-cliente");
-  renderClientes();
+  try {
+    const ref = doc(collection(dbFs, "clientes"));
+    await setDoc(ref, { nombre });
+    cerrarModal("modal-cliente");
+  } catch (e) {
+    alert("No se pudo guardar el cliente. Revisá tu conexión o la configuración de Firebase.");
+    console.error(e);
+  }
 });
 
 /* =========================================================
@@ -239,7 +289,7 @@ document.querySelectorAll("#prestamo-rate-toggle .rate-btn").forEach(btn => {
   btn.addEventListener("click", () => setRateToggle("prestamo-rate-toggle", Number(btn.dataset.rate)));
 });
 
-document.getElementById("btn-guardar-prestamo").addEventListener("click", () => {
+document.getElementById("btn-guardar-prestamo").addEventListener("click", async () => {
   const clienteId = document.getElementById("prestamo-cliente-id").value;
   const capital = parseFloat(document.getElementById("input-capital-prestamo").value);
   const fecha = document.getElementById("input-fecha-prestamo").value || hoyISO();
@@ -247,18 +297,21 @@ document.getElementById("btn-guardar-prestamo").addEventListener("click", () => 
 
   if (!capital || capital <= 0) return;
 
-  db.prestamos.push({
-    id: nuevoId(),
-    clienteId,
-    capitalOriginal: capital,
-    capitalPendiente: capital,
-    tasa,
-    fecha,
-    estado: "activo"
-  });
-  guardarDatos();
-  cerrarModal("modal-prestamo");
-  renderClientes();
+  try {
+    const ref = doc(collection(dbFs, "prestamos"));
+    await setDoc(ref, {
+      clienteId,
+      capitalOriginal: capital,
+      capitalPendiente: capital,
+      tasa,
+      fecha,
+      estado: "activo"
+    });
+    cerrarModal("modal-prestamo");
+  } catch (e) {
+    alert("No se pudo guardar el préstamo. Revisá tu conexión o la configuración de Firebase.");
+    console.error(e);
+  }
 });
 
 /* =========================================================
@@ -279,7 +332,7 @@ function abrirModalPago(prestamoId) {
   abrirModal("modal-pago");
 }
 
-document.getElementById("btn-guardar-pago").addEventListener("click", () => {
+document.getElementById("btn-guardar-pago").addEventListener("click", async () => {
   const prestamoId = document.getElementById("pago-prestamo-id").value;
   const prestamo = db.prestamos.find(p => p.id === prestamoId);
   if (!prestamo) return;
@@ -289,29 +342,38 @@ document.getElementById("btn-guardar-pago").addEventListener("click", () => {
   const abonoCapital = parseFloat(document.getElementById("input-capital-pago").value) || 0;
 
   const capitalAntes = prestamo.capitalPendiente;
-  prestamo.capitalPendiente = Math.max(0, capitalAntes - abonoCapital);
-  if (prestamo.capitalPendiente === 0) prestamo.estado = "saldado";
+  const nuevoPendiente = Math.max(0, capitalAntes - abonoCapital);
+  const nuevoEstado = nuevoPendiente === 0 ? "saldado" : "activo";
 
-  db.pagos.push({
-    id: nuevoId(),
-    prestamoId,
-    fecha,
-    interesCalculado: interesDelMes({ ...prestamo, capitalPendiente: capitalAntes }),
-    interesPagado,
-    abonoCapital,
-    capitalPendienteDespues: prestamo.capitalPendiente
-  });
+  try {
+    await updateDoc(doc(dbFs, "prestamos", prestamoId), {
+      capitalPendiente: nuevoPendiente,
+      estado: nuevoEstado
+    });
 
-  guardarDatos();
-  cerrarModal("modal-pago");
-  renderClientes();
+    const pagoRef = doc(collection(dbFs, "pagos"));
+    await setDoc(pagoRef, {
+      prestamoId,
+      fecha,
+      interesCalculado: interesDelMes({ ...prestamo, capitalPendiente: capitalAntes }),
+      interesPagado,
+      abonoCapital,
+      capitalPendienteDespues: nuevoPendiente
+    });
+
+    cerrarModal("modal-pago");
+  } catch (e) {
+    alert("No se pudo registrar el pago. Revisá tu conexión o la configuración de Firebase.");
+    console.error(e);
+  }
 });
 
 /* =========================================================
    HISTORIAL
    ========================================================= */
-function abrirHistorial(prestamoId) {
+function pintarHistorial(prestamoId) {
   const prestamo = db.prestamos.find(p => p.id === prestamoId);
+  if (!prestamo) return;
   const cliente = db.clientes.find(c => c.id === prestamo.clienteId);
   document.getElementById("historial-titulo").textContent =
     `Historial — ${cliente ? cliente.nombre : ""} (${fmt(prestamo.capitalOriginal)} al ${prestamo.tasa}%)`;
@@ -337,12 +399,77 @@ function abrirHistorial(prestamoId) {
       body.appendChild(tr);
     });
   }
+}
 
+function abrirHistorial(prestamoId) {
+  document.getElementById("modal-historial").dataset.prestamoId = prestamoId;
+  pintarHistorial(prestamoId);
   abrirModal("modal-historial");
 }
 
 /* =========================================================
-   CALCULADORA RÁPIDA
+   BORRAR: cliente individual / préstamo individual / todo
+   ========================================================= */
+async function borrarCliente(clienteId, nombre) {
+  const prestamosCliente = db.prestamos.filter(p => p.clienteId === clienteId);
+  const cantidadPrestamos = prestamosCliente.length;
+  const mensaje = cantidadPrestamos > 0
+    ? `¿Borrar a "${nombre}" junto con ${cantidadPrestamos} préstamo(s) y todo su historial de pagos? Esta acción no se puede deshacer.`
+    : `¿Borrar a "${nombre}"? Esta acción no se puede deshacer.`;
+
+  if (!confirm(mensaje)) return;
+
+  try {
+    const batch = writeBatch(dbFs);
+    prestamosCliente.forEach(p => {
+      db.pagos.filter(pg => pg.prestamoId === p.id).forEach(pg => {
+        batch.delete(doc(dbFs, "pagos", pg.id));
+      });
+      batch.delete(doc(dbFs, "prestamos", p.id));
+    });
+    batch.delete(doc(dbFs, "clientes", clienteId));
+    await batch.commit();
+  } catch (e) {
+    alert("No se pudo borrar. Revisá tu conexión.");
+    console.error(e);
+  }
+}
+
+async function borrarPrestamo(prestamoId) {
+  const prestamo = db.prestamos.find(p => p.id === prestamoId);
+  if (!prestamo) return;
+
+  if (!confirm(`¿Borrar este préstamo de ${fmt(prestamo.capitalOriginal)} y todo su historial de pagos? Esta acción no se puede deshacer.`)) return;
+
+  try {
+    const batch = writeBatch(dbFs);
+    db.pagos.filter(pg => pg.prestamoId === prestamoId).forEach(pg => {
+      batch.delete(doc(dbFs, "pagos", pg.id));
+    });
+    batch.delete(doc(dbFs, "prestamos", prestamoId));
+    await batch.commit();
+  } catch (e) {
+    alert("No se pudo borrar. Revisá tu conexión.");
+    console.error(e);
+  }
+}
+
+document.getElementById("btn-borrar-todo").addEventListener("click", async () => {
+  if (!confirm("¿Seguro que querés borrar todos los clientes, préstamos y pagos de TODOS? Esta acción no se puede deshacer.")) return;
+  try {
+    const batch = writeBatch(dbFs);
+    db.clientes.forEach(c => batch.delete(doc(dbFs, "clientes", c.id)));
+    db.prestamos.forEach(p => batch.delete(doc(dbFs, "prestamos", p.id)));
+    db.pagos.forEach(pg => batch.delete(doc(dbFs, "pagos", pg.id)));
+    await batch.commit();
+  } catch (e) {
+    alert("No se pudo borrar todo. Revisá tu conexión.");
+    console.error(e);
+  }
+});
+
+/* =========================================================
+   CALCULADORA RÁPIDA (no usa Firebase, es solo una simulación)
    ========================================================= */
 document.querySelectorAll("#calc-rate-toggle .rate-btn").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -417,41 +544,7 @@ function renderSim() {
 }
 
 /* =========================================================
-   BORRAR: cliente individual / préstamo individual
-   ========================================================= */
-function borrarCliente(clienteId, nombre) {
-  const prestamosCliente = db.prestamos.filter(p => p.clienteId === clienteId);
-  const cantidadPrestamos = prestamosCliente.length;
-  const mensaje = cantidadPrestamos > 0
-    ? `¿Borrar a "${nombre}" junto con ${cantidadPrestamos} préstamo(s) y todo su historial de pagos? Esta acción no se puede deshacer.`
-    : `¿Borrar a "${nombre}"? Esta acción no se puede deshacer.`;
-
-  if (!confirm(mensaje)) return;
-
-  const idsPrestamosCliente = prestamosCliente.map(p => p.id);
-  db.pagos = db.pagos.filter(pago => !idsPrestamosCliente.includes(pago.prestamoId));
-  db.prestamos = db.prestamos.filter(p => p.clienteId !== clienteId);
-  db.clientes = db.clientes.filter(c => c.id !== clienteId);
-
-  guardarDatos();
-  renderClientes();
-}
-
-function borrarPrestamo(prestamoId) {
-  const prestamo = db.prestamos.find(p => p.id === prestamoId);
-  if (!prestamo) return;
-
-  if (!confirm(`¿Borrar este préstamo de ${fmt(prestamo.capitalOriginal)} y todo su historial de pagos? Esta acción no se puede deshacer.`)) return;
-
-  db.pagos = db.pagos.filter(pago => pago.prestamoId !== prestamoId);
-  db.prestamos = db.prestamos.filter(p => p.id !== prestamoId);
-
-  guardarDatos();
-  renderClientes();
-}
-
-/* =========================================================
-   RESPALDO: exportar / importar / borrar
+   RESPALDO: exportar / importar (ahora lee/escribe en Firebase)
    ========================================================= */
 document.getElementById("btn-exportar").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
@@ -467,27 +560,42 @@ document.getElementById("input-importar").addEventListener("change", e => {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
       const data = JSON.parse(reader.result);
       if (!data.clientes || !data.prestamos || !data.pagos) throw new Error("Formato inválido");
-      db = data;
-      guardarDatos();
-      renderClientes();
+
+      if (!confirm("Esto reemplaza TODOS los datos actuales (de todos los familiares) por los del archivo importado. ¿Continuar?")) return;
+
+      const batchBorrar = writeBatch(dbFs);
+      db.clientes.forEach(c => batchBorrar.delete(doc(dbFs, "clientes", c.id)));
+      db.prestamos.forEach(p => batchBorrar.delete(doc(dbFs, "prestamos", p.id)));
+      db.pagos.forEach(pg => batchBorrar.delete(doc(dbFs, "pagos", pg.id)));
+      await batchBorrar.commit();
+
+      const batchEscribir = writeBatch(dbFs);
+      data.clientes.forEach(c => {
+        const { id, ...resto } = c;
+        batchEscribir.set(doc(dbFs, "clientes", id || nuevoId()), resto);
+      });
+      data.prestamos.forEach(p => {
+        const { id, ...resto } = p;
+        batchEscribir.set(doc(dbFs, "prestamos", id || nuevoId()), resto);
+      });
+      data.pagos.forEach(pg => {
+        const { id, ...resto } = pg;
+        batchEscribir.set(doc(dbFs, "pagos", id || nuevoId()), resto);
+      });
+      await batchEscribir.commit();
+
       alert("Datos importados correctamente.");
     } catch (err) {
-      alert("El archivo no tiene el formato esperado.");
+      alert("El archivo no tiene el formato esperado o hubo un error al importar.");
+      console.error(err);
     }
   };
   reader.readAsText(file);
   e.target.value = "";
-});
-
-document.getElementById("btn-borrar-todo").addEventListener("click", () => {
-  if (!confirm("¿Seguro que querés borrar todos los clientes, préstamos y pagos? Esta acción no se puede deshacer.")) return;
-  db = { clientes: [], prestamos: [], pagos: [] };
-  guardarDatos();
-  renderClientes();
 });
 
 /* =========================================================

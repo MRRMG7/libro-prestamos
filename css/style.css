@@ -72,6 +72,23 @@ html, body {
   color: #C6CCBE;
   font-size: 14px;
 }
+.cover-sync {
+  margin: 8px 0 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: #BFE3C9;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.cover-sync::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
 .cover-totals {
   position: relative;
   display: grid;

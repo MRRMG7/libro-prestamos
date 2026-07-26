@@ -28,15 +28,42 @@ git push -u origin main
 
 Después activás Pages como en el paso 3.
 
-## Importante: los datos son locales al navegador
+## Los datos se sincronizan solos entre celulares (Firebase)
 
-Esta app **no tiene servidor ni base de datos**: todo se guarda en el navegador del celular o computadora donde se use (localStorage). Esto significa:
+Esta app usa **Firebase Firestore** (plan gratuito, no pide tarjeta) como base de datos en la nube. Cualquier celular o computadora que abra el sitio ve los mismos clientes, préstamos y pagos, en tiempo real. Para que funcione, tenés que crear tu propio proyecto de Firebase (es tuyo, gratis, y solo tarda unos minutos) y pegar su configuración en el código.
 
-- Si vos registrás un pago desde tu celular, **no aparece automáticamente** en el celular de otro familiar.
-- Para compartir la información actualizada entre varios dispositivos, usá la pestaña **Datos**:
-  - **Exportar datos** genera un archivo `.json` con todo (clientes, préstamos, pagos).
-  - Ese archivo se lo pasás a la otra persona (WhatsApp, correo, etc.) y ella lo carga con **Importar datos** en su celular.
-- Si en el futuro quieren que todos vean lo mismo en tiempo real sin pasarse archivos, se necesitaría agregar una base de datos en la nube (por ejemplo Firebase). Puedo ayudarte a agregar eso después si te interesa.
+### Paso a paso para conectar Firebase
+
+1. Andá a [console.firebase.google.com](https://console.firebase.google.com) e iniciá sesión con una cuenta de Google.
+2. **Add project / Crear proyecto** → ponele un nombre (ej. `libro-prestamos`) → seguí los pasos (podés desactivar Google Analytics, no hace falta) → **Crear proyecto**.
+3. En el menú izquierdo: **Build → Firestore Database** → **Create database**.
+   - Elegí una ubicación (cualquiera de EE.UU. o la más cercana está bien) → **Next**.
+   - En "Rules", elegí **Start in production mode** → **Enable**.
+4. Andá a la pestaña **Rules** dentro de Firestore Database y reemplazá el contenido por esto (permite que la app lea y escriba, ya que es de uso familiar sin login):
+
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /{document=**} {
+         allow read, write: if true;
+       }
+     }
+   }
+   ```
+   Clic en **Publish**.
+
+   ⚠️ Esto significa que cualquiera que tenga el link de tu sitio (o encuentre la configuración) podría, en teoría, ver o modificar los datos. Para un uso informal familiar está bien, pero no es apto para datos delicados. Si más adelante querés protegerlo con una contraseña de verdad, se puede agregar Firebase Authentication.
+
+5. Volvé a la página principal del proyecto (ícono de casita) → clic en el ícono **</>** ("Web") para registrar una app web.
+   - Ponele un apodo (ej. `libro-prestamos-web`) → **Registrar app**.
+   - Te va a mostrar un bloque de código con un objeto `firebaseConfig = { apiKey: ..., authDomain: ..., ... }`. Copiá esos valores.
+6. En tu repo de GitHub (o en Antigravity/Cursor), abrí el archivo **`js/firebase-config.js`** y reemplazá los valores de ejemplo por los tuyos, tal cual los copiaste. Guardá.
+7. Subí el cambio a GitHub (commit + push). En 1-2 minutos, recargá tu sitio — arriba, junto al título, debería aparecer un punto verde con **"Conectado"**.
+
+### Backup
+
+Aunque ahora los datos viven en la nube, la pestaña **Datos → Exportar datos** sigue sirviendo como respaldo por si algún día alguien borra algo por error.
 
 ## Estructura de archivos
 
