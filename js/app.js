@@ -114,6 +114,13 @@ function renderClientes() {
     btnPrestar.textContent = "+ Préstamo";
     btnPrestar.addEventListener("click", () => abrirModalPrestamo(cliente.id));
     acciones.appendChild(btnPrestar);
+
+    const btnBorrarCliente = document.createElement("button");
+    btnBorrarCliente.className = "btn btn-danger btn-small";
+    btnBorrarCliente.textContent = "Borrar cliente";
+    btnBorrarCliente.addEventListener("click", () => borrarCliente(cliente.id, cliente.nombre));
+    acciones.appendChild(btnBorrarCliente);
+
     head.appendChild(acciones);
     card.appendChild(head);
 
@@ -169,6 +176,12 @@ function renderTicketPrestamo(prestamo) {
   btnHist.textContent = "Historial";
   btnHist.addEventListener("click", () => abrirHistorial(prestamo.id));
   acciones.appendChild(btnHist);
+
+  const btnBorrarPrestamo = document.createElement("button");
+  btnBorrarPrestamo.className = "btn btn-danger btn-small";
+  btnBorrarPrestamo.textContent = "Borrar préstamo";
+  btnBorrarPrestamo.addEventListener("click", () => borrarPrestamo(prestamo.id));
+  acciones.appendChild(btnBorrarPrestamo);
 
   ticket.appendChild(stamp);
   ticket.appendChild(info);
@@ -401,6 +414,40 @@ function renderSim() {
       renderSim();
     });
   });
+}
+
+/* =========================================================
+   BORRAR: cliente individual / préstamo individual
+   ========================================================= */
+function borrarCliente(clienteId, nombre) {
+  const prestamosCliente = db.prestamos.filter(p => p.clienteId === clienteId);
+  const cantidadPrestamos = prestamosCliente.length;
+  const mensaje = cantidadPrestamos > 0
+    ? `¿Borrar a "${nombre}" junto con ${cantidadPrestamos} préstamo(s) y todo su historial de pagos? Esta acción no se puede deshacer.`
+    : `¿Borrar a "${nombre}"? Esta acción no se puede deshacer.`;
+
+  if (!confirm(mensaje)) return;
+
+  const idsPrestamosCliente = prestamosCliente.map(p => p.id);
+  db.pagos = db.pagos.filter(pago => !idsPrestamosCliente.includes(pago.prestamoId));
+  db.prestamos = db.prestamos.filter(p => p.clienteId !== clienteId);
+  db.clientes = db.clientes.filter(c => c.id !== clienteId);
+
+  guardarDatos();
+  renderClientes();
+}
+
+function borrarPrestamo(prestamoId) {
+  const prestamo = db.prestamos.find(p => p.id === prestamoId);
+  if (!prestamo) return;
+
+  if (!confirm(`¿Borrar este préstamo de ${fmt(prestamo.capitalOriginal)} y todo su historial de pagos? Esta acción no se puede deshacer.`)) return;
+
+  db.pagos = db.pagos.filter(pago => pago.prestamoId !== prestamoId);
+  db.prestamos = db.prestamos.filter(p => p.id !== prestamoId);
+
+  guardarDatos();
+  renderClientes();
 }
 
 /* =========================================================
