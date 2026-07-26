@@ -65,8 +65,14 @@ function interesDelMes(prestamo) {
    ========================================================= */
 onSnapshot(collection(dbFs, "clientes"), snap => {
   db.clientes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  setEstadoSync(snap.metadata.fromCache ? "Sin conexión — mostrando la última copia" : "Conectado", !snap.metadata.fromCache || navigator.onLine);
+
+  if (navigator.onLine) {
+    setEstadoSync("Conectado", true);
+  } else {
+    setEstadoSync("Sin conexión — mostrando la última copia", false);
+  }
   renderClientes();
+   
 }, err => {
   console.error(err);
   setEstadoSync("Error de conexión con Firebase (revisá firebase-config.js)", false);
