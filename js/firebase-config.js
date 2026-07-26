@@ -12,10 +12,12 @@
 // };
 
 export const firebaseConfig = {
-  apiKey: "PEGA_AQUI_TU_API_KEY",
-  authDomain: "PEGA_AQUI_TU_PROYECTO.firebaseapp.com",
-  projectId: "PEGA_AQUI_TU_PROYECTO",
-  storageBucket: "PEGA_AQUI_TU_PROYECTO.appspot.com",
-  messagingSenderId: "PEGA_AQUI_TU_SENDER_ID",
-  appId: "PEGA_AQUI_TU_APP_ID"
+  apiKey: "AIzaSyA6dXFDjUz8Ra9Ulcqk2X_0tOaVBXavwTU",
+  authDomain: "libro-prestamos-8ead2.firebaseapp.com",
+  projectId: "libro-prestamos-8ead2",
+  storageBucket: "libro-prestamos-8ead2.firebasestorage.app",
+  messagingSenderId: "399868719291",
+  appId: "1:399868719291:web:d9727368d2ebc9d945399e",
+  measurementId: "G-P8JNWE4NJL"
+
 };
