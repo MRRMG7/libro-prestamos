@@ -59,6 +59,47 @@ window.addEventListener("offline", () => setEstadoSync("Sin conexión — se sin
 window.addEventListener("online", () => setEstadoSync("Conectado", true));
 
 /* ---------- Acceso: solo la familia entra ---------- */
+let desuscribirListeners = [];
+
+function detenerSuscripciones() {
+  desuscribirListeners.forEach(fn => fn());
+  desuscribirListeners = [];
+  db = { clientes: [], prestamos: [], pagos: [] };
+}
+
+function iniciarSuscripciones() {
+  const unsubClientes = onSnapshot(collection(dbFs, "clientes"), snap => {
+    db.clientes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (navigator.onLine) {
+      setEstadoSync("Conectado", true);
+    } else {
+      setEstadoSync("Sin conexión — mostrando la última copia", false);
+    }
+    renderClientes();
+  }, err => {
+    console.error(err);
+    setEstadoSync("Error de conexión con Firebase (revisá firebase-config.js)", false);
+  });
+
+  const unsubPrestamos = onSnapshot(collection(dbFs, "prestamos"), snap => {
+    db.prestamos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderClientes();
+  });
+
+  const unsubPagos = onSnapshot(collection(dbFs, "pagos"), snap => {
+    db.pagos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderClientes();
+    // si el modal de historial está abierto, lo refrescamos también
+    const modalHist = document.getElementById("modal-historial");
+    if (modalHist.classList.contains("open")) {
+      const prestamoId = modalHist.dataset.prestamoId;
+      if (prestamoId) pintarHistorial(prestamoId);
+    }
+  });
+
+  desuscribirListeners = [unsubClientes, unsubPrestamos, unsubPagos];
+}
+
 onAuthStateChanged(auth, user => {
   const loginScreen = document.getElementById("login-screen");
   const appRoot = document.getElementById("app-root");
@@ -68,10 +109,13 @@ onAuthStateChanged(auth, user => {
     loginScreen.style.display = "none";
     appRoot.hidden = false;
     btnLogout.hidden = false;
+    setEstadoSync("Conectando…", true);
+    iniciarSuscripciones();
   } else {
     loginScreen.style.display = "flex";
     appRoot.hidden = true;
     btnLogout.hidden = true;
+    detenerSuscripciones();
   }
 });
 
@@ -86,7 +130,8 @@ document.getElementById("btn-login").addEventListener("click", async () => {
   try {
     await signInWithEmailAndPassword(auth, email, password);
   } catch (e) {
-    errorEl.textContent = "Correo o contraseña incorrectos.";
+    console.error(e);
+    errorEl.textContent = `Error: ${e.code || e.message}`;
     errorEl.hidden = false;
   }
 });
@@ -103,40 +148,6 @@ document.getElementById("btn-logout").addEventListener("click", () => signOut(au
 function interesDelMes(prestamo) {
   return prestamo.capitalPendiente * (prestamo.tasa / 100);
 }
-
-/* =========================================================
-   SUSCRIPCIONES EN TIEMPO REAL A FIRESTORE
-   Cualquier cambio (propio o de otro familiar) llega aquí y
-   se vuelve a dibujar la pantalla automáticamente.
-   ========================================================= */
-onSnapshot(collection(dbFs, "clientes"), snap => {
-  db.clientes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  if (navigator.onLine) {
-    setEstadoSync("Conectado", true);
-  } else {
-    setEstadoSync("Sin conexión — mostrando la última copia", false);
-  }
-  renderClientes();
-}, err => {
-  console.error(err);
-  setEstadoSync("Error de conexión con Firebase (revisá firebase-config.js)", false);
-});
-
-onSnapshot(collection(dbFs, "prestamos"), snap => {
-  db.prestamos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  renderClientes();
-});
-
-onSnapshot(collection(dbFs, "pagos"), snap => {
-  db.pagos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  renderClientes();
-  // si el modal de historial está abierto, lo refrescamos también
-  const modalHist = document.getElementById("modal-historial");
-  if (modalHist.classList.contains("open")) {
-    const prestamoId = modalHist.dataset.prestamoId;
-    if (prestamoId) pintarHistorial(prestamoId);
-  }
-});
 
 /* =========================================================
    NAVEGACIÓN DE TABS
