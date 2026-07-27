@@ -149,6 +149,69 @@ function interesDelMes(prestamo) {
   return prestamo.capitalPendiente * (prestamo.tasa / 100);
 }
 
+/* ---------- Interés acumulado por fechas de aniversario ---------- */
+// Suma n meses a una fecha "YYYY-MM-DD", ajustando el día si el mes
+// destino tiene menos días (ej. 31 de enero + 1 mes = 28/29 de febrero).
+function sumarMeses(fechaStr, n) {
+  const [y, m, d] = fechaStr.split("-").map(Number);
+  const indiceMesDestino = (m - 1) + n;
+  const anioDestino = y + Math.floor(indiceMesDestino / 12);
+  const mesDestino = ((indiceMesDestino % 12) + 12) % 12;
+  const ultimoDiaMes = new Date(anioDestino, mesDestino + 1, 0).getDate();
+  const dia = Math.min(d, ultimoDiaMes);
+  const mm = String(mesDestino + 1).padStart(2, "0");
+  const dd = String(dia).padStart(2, "0");
+  return `${anioDestino}-${mm}-${dd}`;
+}
+
+// Fechas de cobro (aniversarios mensuales) desde el inicio del préstamo
+// hasta una fecha límite, sin pasarse de esa fecha.
+function obtenerAniversarios(prestamo, fechaHasta) {
+  const aniversarios = [];
+  let n = 1;
+  let fecha = sumarMeses(prestamo.fecha, n);
+  while (fecha <= fechaHasta) {
+    aniversarios.push(fecha);
+    n++;
+    fecha = sumarMeses(prestamo.fecha, n);
+  }
+  return aniversarios;
+}
+
+// Capital pendiente que tenía el préstamo justo en una fecha de corte,
+// reconstruido a partir de los abonos ya registrados hasta esa fecha (inclusive).
+function capitalPendienteEnFecha(prestamo, fechaCorte) {
+  const totalAbonado = db.pagos
+    .filter(pg => pg.prestamoId === prestamo.id && pg.fecha <= fechaCorte)
+    .reduce((s, pg) => s + (pg.abonoCapital || 0), 0);
+  return Math.max(0, prestamo.capitalOriginal - totalAbonado);
+}
+
+// Interés devengado, pagado y pendiente (acumulado de todos los meses
+// vencidos) hasta una fecha dada. Un abono a capital solo reduce el
+// interés a partir del mes SIGUIENTE a cuando se registró.
+function calcularInteresAcumulado(prestamo, fechaHasta) {
+  fechaHasta = fechaHasta || hoyISO();
+  const aniversarios = obtenerAniversarios(prestamo, fechaHasta);
+  const boundaries = [prestamo.fecha, ...aniversarios];
+
+  let devengado = 0;
+  for (let i = 1; i < boundaries.length; i++) {
+    const capitalInicioPeriodo = capitalPendienteEnFecha(prestamo, boundaries[i - 1]);
+    devengado += capitalInicioPeriodo * (prestamo.tasa / 100);
+  }
+
+  const pagado = db.pagos
+    .filter(pg => pg.prestamoId === prestamo.id)
+    .reduce((s, pg) => s + (pg.interesPagado || 0), 0);
+
+  const pendiente = Math.max(0, devengado - pagado);
+  const interesMensualActual = prestamo.capitalPendiente * (prestamo.tasa / 100);
+  const mesesAtrasados = interesMensualActual > 0.005 ? Math.max(1, Math.round(pendiente / interesMensualActual)) : 0;
+
+  return { devengado, pagado, pendiente, mesesAtrasados, boundaries };
+}
+
 /* =========================================================
    NAVEGACIÓN DE TABS
    ========================================================= */
@@ -246,7 +309,113 @@ function renderClientes() {
   });
 
   renderTotales();
+  renderResumenSelect();
 }
+
+/* =========================================================
+   RESUMEN: control mensual por préstamo
+   ========================================================= */
+function renderResumenSelect() {
+  const select = document.getElementById("resumen-select-prestamo");
+  const tbody = document.getElementById("resumen-body");
+  const emptyHint = document.getElementById("empty-resumen");
+  if (!select || !tbody || !emptyHint) return;
+
+  const valorPrevio = select.value;
+  select.innerHTML = "";
+
+  if (db.prestamos.length === 0) {
+    tbody.innerHTML = "";
+    emptyHint.hidden = false;
+    return;
+  }
+  emptyHint.hidden = true;
+
+  db.prestamos.forEach(p => {
+    const cliente = db.clientes.find(c => c.id === p.clienteId);
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = `${cliente ? cliente.nombre : "?"} — ${fmt(p.capitalOriginal)} al ${p.tasa}% (${p.fecha})${p.estado === "saldado" ? " · Saldado" : ""}`;
+    select.appendChild(opt);
+  });
+
+  const idASeleccionar = db.prestamos.some(p => p.id === valorPrevio) ? valorPrevio : db.prestamos[0].id;
+  select.value = idASeleccionar;
+  renderResumenTabla(idASeleccionar);
+}
+
+function renderResumenTabla(prestamoId) {
+  const tbody = document.getElementById("resumen-body");
+  const emptyHint = document.getElementById("empty-resumen");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  const prestamo = db.prestamos.find(p => p.id === prestamoId);
+  if (!prestamo) {
+    emptyHint.hidden = false;
+    return;
+  }
+  emptyHint.hidden = true;
+
+  const hoy = hoyISO();
+  const aniversarios = obtenerAniversarios(prestamo, hoy);
+  const boundaries = [prestamo.fecha, ...aniversarios];
+
+  if (boundaries.length < 2) {
+    tbody.innerHTML = `<tr><td colspan="7" class="hint">Todavía no se cumple el primer mes de este préstamo.</td></tr>`;
+    return;
+  }
+
+  const pagosPrestamo = db.pagos.filter(pg => pg.prestamoId === prestamoId);
+
+  let devengadoAcum = 0;
+  let pagadoInteresAcum = 0;
+
+  for (let i = 1; i < boundaries.length; i++) {
+    const inicioPeriodo = boundaries[i - 1];
+    const finPeriodo = boundaries[i];
+
+    const capitalInicial = capitalPendienteEnFecha(prestamo, inicioPeriodo);
+    const interesDelMesPeriodo = capitalInicial * (prestamo.tasa / 100);
+    const interesAtrasadoAntes = Math.max(0, devengadoAcum - pagadoInteresAcum);
+
+    const pagosDelPeriodo = pagosPrestamo.filter(pg => pg.fecha > inicioPeriodo && pg.fecha <= finPeriodo);
+    const interesCobrado = pagosDelPeriodo.reduce((s, pg) => s + (pg.interesPagado || 0), 0);
+    const capitalCobrado = pagosDelPeriodo.reduce((s, pg) => s + (pg.abonoCapital || 0), 0);
+
+    devengadoAcum += interesDelMesPeriodo;
+    pagadoInteresAcum += interesCobrado;
+
+    const pendienteAlCierre = Math.max(0, devengadoAcum - pagadoInteresAcum);
+    const capitalPendienteAlCierre = capitalPendienteEnFecha(prestamo, finPeriodo);
+
+    let estado;
+    if (capitalPendienteAlCierre <= 0.005) {
+      estado = "Saldado";
+    } else if (pendienteAlCierre <= 0.005) {
+      estado = "Al día";
+    } else {
+      const mesesDeuda = interesDelMesPeriodo > 0.005 ? Math.max(1, Math.round(pendienteAlCierre / interesDelMesPeriodo)) : 1;
+      estado = `Debiendo ${mesesDeuda} mes(es) (${fmt(pendienteAlCierre)})`;
+    }
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${finPeriodo}</td>
+      <td class="mono">${fmt(capitalInicial)}</td>
+      <td class="mono">${fmt(interesDelMesPeriodo)}</td>
+      <td class="mono">${fmt(interesAtrasadoAntes)}</td>
+      <td class="mono">${fmt(interesCobrado)}</td>
+      <td class="mono">${fmt(capitalCobrado)}</td>
+      <td class="${estado.startsWith("Debiendo") ? "deuda-alerta" : ""}">${estado}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+document.getElementById("resumen-select-prestamo")?.addEventListener("change", e => {
+  renderResumenTabla(e.target.value);
+});
 
 function renderTicketPrestamo(prestamo) {
   const saldado = prestamo.estado === "saldado";
@@ -259,12 +428,24 @@ function renderTicketPrestamo(prestamo) {
 
   const info = document.createElement("div");
   info.className = "prestamo-info";
+
+  let lineaDeuda = "";
+  if (!saldado) {
+    const acumulado = calcularInteresAcumulado(prestamo, hoyISO());
+    if (acumulado.pendiente > 0.005) {
+      const etiquetaMeses = acumulado.mesesAtrasados > 1 ? ` (${acumulado.mesesAtrasados} meses)` : "";
+      lineaDeuda = `<span class="prestamo-meta deuda-alerta">Debe: ${fmt(acumulado.pendiente)}${etiquetaMeses}</span>`;
+    } else {
+      lineaDeuda = `<span class="prestamo-meta">Al día · interés acumulado: ${fmt(acumulado.pendiente)}</span>`;
+    }
+  }
+
   info.innerHTML = `
     <span class="prestamo-capital mono">${fmt(prestamo.capitalPendiente)} pendiente
       <span class="badge ${saldado ? "badge-saldado" : "badge-pendiente"}">${saldado ? "Saldado" : "Activo"}</span>
     </span>
     <span class="prestamo-meta">Capital original ${fmt(prestamo.capitalOriginal)} · prestado ${prestamo.fecha}</span>
-    ${!saldado ? `<span class="prestamo-meta">Interés de este mes: ${fmt(interesDelMes(prestamo))}</span>` : ""}
+    ${lineaDeuda}
   `;
 
   const acciones = document.createElement("div");
@@ -382,13 +563,16 @@ function abrirModalPago(prestamoId) {
   const prestamo = db.prestamos.find(p => p.id === prestamoId);
   if (!prestamo) return;
 
+  const acumulado = calcularInteresAcumulado(prestamo, hoyISO());
+  const etiquetaMeses = acumulado.mesesAtrasados > 1 ? ` (${acumulado.mesesAtrasados} meses)` : "";
+
   document.getElementById("pago-prestamo-id").value = prestamoId;
   document.getElementById("input-fecha-pago").value = hoyISO();
-  document.getElementById("input-interes-pago").value = interesDelMes(prestamo).toFixed(2);
+  document.getElementById("input-interes-pago").value = acumulado.pendiente.toFixed(2);
   document.getElementById("input-capital-pago").value = "0";
   document.getElementById("pago-resumen").innerHTML = `
     Capital pendiente actual: <b>${fmt(prestamo.capitalPendiente)}</b> · Tasa: <b>${prestamo.tasa}%</b><br>
-    Interés sugerido para este mes: <b>${fmt(interesDelMes(prestamo))}</b>
+    Interés acumulado pendiente${etiquetaMeses}: <b>${fmt(acumulado.pendiente)}</b>
   `;
   abrirModal("modal-pago");
 }
@@ -401,6 +585,7 @@ document.getElementById("btn-guardar-pago").addEventListener("click", async () =
   const fecha = document.getElementById("input-fecha-pago").value || hoyISO();
   const interesPagado = parseFloat(document.getElementById("input-interes-pago").value) || 0;
   const abonoCapital = parseFloat(document.getElementById("input-capital-pago").value) || 0;
+  const acumuladoAlMomento = calcularInteresAcumulado(prestamo, fecha);
 
   const capitalAntes = prestamo.capitalPendiente;
   const nuevoPendiente = Math.max(0, capitalAntes - abonoCapital);
@@ -416,7 +601,7 @@ document.getElementById("btn-guardar-pago").addEventListener("click", async () =
     await setDoc(pagoRef, {
       prestamoId,
       fecha,
-      interesCalculado: interesDelMes({ ...prestamo, capitalPendiente: capitalAntes }),
+      interesCalculado: acumuladoAlMomento.pendiente,
       interesPagado,
       abonoCapital,
       capitalPendienteDespues: nuevoPendiente
