@@ -222,9 +222,9 @@ html, body {
 
 /* ===== CLIENTES / PRESTAMOS ===== */
 .clientes-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
 }
 .cliente-card {
   background: var(--paper-raised);
@@ -251,6 +251,7 @@ html, body {
   padding: 12px 14px;
   display: grid;
   grid-template-columns: 52px 1fr auto;
+  grid-template-rows: auto auto;
   gap: 12px;
   align-items: center;
   margin-top: 10px;
@@ -300,6 +301,34 @@ html, body {
   gap: 6px;
   align-items: flex-end;
 }
+
+.prestamo-nota-container {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: rgba(199,125,46,0.06);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.prestamo-nota-texto { flex: 1; }
+.prestamo-nota-editar,
+.prestamo-nota-agregar {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--accent);
+  padding: 2px 4px;
+  white-space: nowrap;
+}
+.prestamo-nota-editar:hover,
+.prestamo-nota-agregar:hover { color: var(--ink); }
 
 .empty-hint {
   color: var(--ink-soft);
@@ -448,6 +477,96 @@ input:focus, .rate-btn:focus, .btn:focus, .tab:focus {
 .tabla-historial th { color: var(--ink-soft); font-weight: 600; }
 .tabla-historial td.mono { font-family: 'IBM Plex Mono', monospace; }
 
+/* ===== RESUMEN GRID ===== */
+.search-bar { margin: 12px 0 0; }
+.search-bar input {
+  width: 100%;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.resumen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.month-card {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.15s;
+}
+.month-card:hover { box-shadow: 0 2px 0 rgba(32,43,35,0.06), 0 8px 24px rgba(32,43,35,0.1); }
+
+.month-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.month-card-name {
+  font-family: 'Fraunces', serif;
+  font-size: 16px;
+  font-weight: 600;
+}
+.month-card-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+.status-aldia { background: var(--pine-soft); color: var(--pine); }
+.status-saldado { background: var(--pine-soft); color: var(--pine); }
+.status-deuda { background: var(--brick-soft); color: var(--brick); }
+
+.month-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.month-card-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.month-card-row.total {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.month-card-detail {
+  align-self: flex-start;
+}
+
+.month-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+/* ===== DETALLE MES MODAL ===== */
+.detail-subtitle {
+  font-family: 'Fraunces', serif;
+  font-size: 15px;
+  margin: 16px 0 8px;
+}
+.detail-table { font-size: 12px; }
+.detail-table th, .detail-table td { padding: 6px 8px; }
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 560px) {
   .cover-title { font-size: 28px; }
@@ -456,6 +575,7 @@ input:focus, .rate-btn:focus, .btn:focus, .tab:focus {
   .prestamo-ticket { grid-template-columns: 40px 1fr; }
   .prestamo-acciones { grid-column: 1 / -1; flex-direction: row; justify-content: flex-end; }
   .stamp { width: 40px; height: 40px; font-size: 11px; }
+  .resumen-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
