@@ -330,7 +330,7 @@ label {
   font-weight: 600;
   color: var(--ink-soft);
 }
-input[type="number"], input[type="text"], input[type="date"] {
+input[type="number"], input[type="text"], input[type="date"], select {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 15px;
   padding: 10px 12px;
@@ -339,6 +339,9 @@ input[type="number"], input[type="text"], input[type="date"] {
   background: #fff;
   color: var(--ink);
 }
+select { width: 100%; }
+.resumen-card { max-width: 100%; }
+.deuda-alerta { color: var(--brick); font-weight: 700; }
 input:focus, .rate-btn:focus, .btn:focus, .tab:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;

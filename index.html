@@ -56,6 +56,7 @@
 
   <nav class="tabs" role="tablist">
     <button class="tab active" data-tab="clientes">Clientes</button>
+    <button class="tab" data-tab="resumen">Resumen</button>
     <button class="tab" data-tab="calculadora">Calculadora</button>
     <button class="tab" data-tab="datos">Datos</button>
   </nav>
@@ -74,6 +75,40 @@
       Todavía no hay clientes. Agregá el primero para empezar a llevar el control.
     </p>
 
+  </section>
+
+  <!-- ===== TAB: RESUMEN ===== -->
+  <section class="panel" id="tab-resumen">
+    <div class="panel-head">
+      <h2>Control mensual</h2>
+    </div>
+
+    <div class="calc-card resumen-card">
+      <label>Préstamo
+        <select id="resumen-select-prestamo"></select>
+      </label>
+
+      <p class="empty-hint" id="empty-resumen" hidden>
+        Todavía no hay préstamos para mostrar.
+      </p>
+
+      <div class="tabla-wrap" style="margin-top:14px;">
+        <table class="tabla-historial">
+          <thead>
+            <tr>
+              <th>Mes</th>
+              <th>Capital inicial</th>
+              <th>Interés del mes</th>
+              <th>Interés atrasado</th>
+              <th>Cobrado interés</th>
+              <th>Cobrado capital</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="resumen-body"></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
   <!-- ===== TAB: CALCULADORA ===== -->
