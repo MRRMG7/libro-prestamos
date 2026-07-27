@@ -258,14 +258,26 @@ function renderClientes() {
   const emptyHint = document.getElementById("empty-clientes");
   cont.innerHTML = "";
 
-  if (db.clientes.length === 0) {
+  const filtro = (document.getElementById("input-buscar-clientes")?.value || "").toLowerCase().trim();
+  let clientesFiltrados = db.clientes;
+  if (filtro) {
+    clientesFiltrados = db.clientes.filter(c => c.nombre.toLowerCase().includes(filtro));
+  }
+
+  if (clientesFiltrados.length === 0) {
     emptyHint.hidden = false;
+    if (filtro && db.clientes.length > 0) {
+      emptyHint.textContent = `No se encontraron clientes que coincidan con "${filtro}".`;
+    } else {
+      emptyHint.textContent = "Todavía no hay clientes. Agregá el primero para empezar a llevar el control.";
+    }
     renderTotales();
     return;
   }
   emptyHint.hidden = true;
+  emptyHint.textContent = "Todavía no hay clientes. Agregá el primero para empezar a llevar el control.";
 
-  db.clientes.forEach(cliente => {
+  clientesFiltrados.forEach(cliente => {
     const prestamosCliente = db.prestamos.filter(p => p.clienteId === cliente.id);
 
     const card = document.createElement("div");
@@ -279,6 +291,12 @@ function renderClientes() {
     const acciones = document.createElement("div");
     acciones.className = "cliente-acciones";
 
+    const btnEditar = document.createElement("button");
+    btnEditar.className = "btn btn-ghost btn-small";
+    btnEditar.textContent = "Editar";
+    btnEditar.addEventListener("click", () => abrirEditarCliente(cliente.id));
+    acciones.appendChild(btnEditar);
+
     const btnPrestar = document.createElement("button");
     btnPrestar.className = "btn btn-ghost btn-small";
     btnPrestar.textContent = "+ Préstamo";
@@ -287,7 +305,7 @@ function renderClientes() {
 
     const btnBorrarCliente = document.createElement("button");
     btnBorrarCliente.className = "btn btn-danger btn-small";
-    btnBorrarCliente.textContent = "Borrar cliente";
+    btnBorrarCliente.textContent = "Borrar";
     btnBorrarCliente.addEventListener("click", () => borrarCliente(cliente.id, cliente.nombre));
     acciones.appendChild(btnBorrarCliente);
 
@@ -345,10 +363,10 @@ function renderResumenSelect() {
 }
 
 function renderResumenTabla(prestamoId) {
-  const tbody = document.getElementById("resumen-body");
+  const grid = document.getElementById("resumen-grid");
   const emptyHint = document.getElementById("empty-resumen");
-  if (!tbody) return;
-  tbody.innerHTML = "";
+  if (!grid) return;
+  grid.innerHTML = "";
 
   const prestamo = db.prestamos.find(p => p.id === prestamoId);
   if (!prestamo) {
@@ -357,17 +375,114 @@ function renderResumenTabla(prestamoId) {
   }
   emptyHint.hidden = true;
 
-  const hoy = hoyISO();
-  const aniversarios = obtenerAniversarios(prestamo, hoy);
-  const boundaries = [prestamo.fecha, ...aniversarios];
-
-  if (boundaries.length < 2) {
-    tbody.innerHTML = `<tr><td colspan="7" class="hint">Todavía no se cumple el primer mes de este préstamo.</td></tr>`;
+  const meses = obtenerMesesGrid(prestamoId);
+  if (meses.length === 0) {
+    grid.innerHTML = `<p class="empty-hint">Todavía no se cumple el primer mes de este préstamo.</p>`;
     return;
   }
 
-  const pagosPrestamo = db.pagos.filter(pg => pg.prestamoId === prestamoId);
+  const filtro = (document.getElementById("input-buscar-resumen")?.value || "").toLowerCase().trim();
+  let mesesFiltrados = meses;
+  if (filtro) {
+    const cliente = db.clientes.find(c => c.id === prestamo.clienteId);
+    const clienteMatch = cliente && cliente.nombre.toLowerCase().includes(filtro);
 
+    mesesFiltrados = meses.filter(m => {
+      const [anio, mesNum] = m.finPeriodo.split("-");
+      const nombreMes = nombreMesLargo(Number(mesNum)).toLowerCase();
+      const mesAnio = `${nombreMes} ${anio}`;
+      return mesAnio.includes(filtro) || clienteMatch;
+    });
+
+    if (mesesFiltrados.length === 0) {
+      grid.innerHTML = `<p class="empty-hint">No se encontraron meses que coincidan con "${filtro}".</p>`;
+      return;
+    }
+  }
+
+  mesesFiltrados.forEach(mes => {
+    const card = document.createElement("div");
+    card.className = "month-card";
+
+    const [anio, mesNum] = mes.finPeriodo.split("-");
+    const nombreMes = nombreMesLargo(Number(mesNum));
+
+    const statusClass = mes.estado === "Saldado" ? "status-saldado"
+      : mes.estado === "Al día" ? "status-aldia" : "status-deuda";
+
+    card.innerHTML = `
+      <div class="month-card-head">
+        <span class="month-card-name">${nombreMes} ${anio}</span>
+        <span class="month-card-status ${statusClass}">${mes.estado}</span>
+      </div>
+      <div class="month-card-body">
+        <div class="month-card-row">
+          <span>Capital inicial</span><span class="mono">${fmt(mes.capitalInicial)}</span>
+        </div>
+        <div class="month-card-row">
+          <span>Interés del mes</span><span class="mono">${fmt(mes.interesDelMes)}</span>
+        </div>
+        <div class="month-card-row">
+          <span>Interés cobrado</span><span class="mono">${fmt(mes.interesCobrado)}</span>
+        </div>
+        <div class="month-card-row">
+          <span>Capital cobrado</span><span class="mono">${fmt(mes.capitalCobrado)}</span>
+        </div>
+        <div class="month-card-row total">
+          <span>Total cobrado</span>
+          <span class="mono">${fmt(mes.interesCobrado + mes.capitalCobrado)}</span>
+        </div>
+      </div>
+      <div class="month-card-actions">
+        <button class="btn btn-primary btn-small month-card-detail" data-finperiodo="${mes.finPeriodo}">
+          Ver Detalle
+        </button>
+        <button class="btn btn-ghost btn-small month-card-edit" data-finperiodo="${mes.finPeriodo}">
+          Editar
+        </button>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+
+  grid.querySelectorAll(".month-card-detail").forEach(btn => {
+    btn.addEventListener("click", () => {
+      abrirDetalleMes(prestamoId, btn.dataset.finperiodo);
+    });
+  });
+  grid.querySelectorAll(".month-card-edit").forEach(btn => {
+    btn.addEventListener("click", () => {
+      abrirEditarPagoMes(prestamoId, btn.dataset.finperiodo);
+    });
+  });
+}
+
+document.getElementById("resumen-select-prestamo")?.addEventListener("change", e => {
+  renderResumenTabla(e.target.value);
+});
+
+document.getElementById("input-buscar-resumen")?.addEventListener("input", () => {
+  const prestamoId = document.getElementById("resumen-select-prestamo").value;
+  if (prestamoId) renderResumenTabla(prestamoId);
+});
+
+function nombreMesLargo(num) {
+  const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                 "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  return meses[num - 1] || "";
+}
+
+function obtenerMesesGrid(prestamoId) {
+  const prestamo = db.prestamos.find(p => p.id === prestamoId);
+  if (!prestamo) return [];
+
+  const hoy = hoyISO();
+  const aniversarios = obtenerAniversarios(prestamo, hoy);
+  const boundaries = [prestamo.fecha, ...aniversarios];
+  if (boundaries.length < 2) return [];
+
+  const pagosPrestamo = db.pagos.filter(pg => pg.prestamoId === prestamoId);
+  const meses = [];
   let devengadoAcum = 0;
   let pagadoInteresAcum = 0;
 
@@ -379,7 +494,9 @@ function renderResumenTabla(prestamoId) {
     const interesDelMesPeriodo = capitalInicial * (prestamo.tasa / 100);
     const interesAtrasadoAntes = Math.max(0, devengadoAcum - pagadoInteresAcum);
 
-    const pagosDelPeriodo = pagosPrestamo.filter(pg => pg.fecha > inicioPeriodo && pg.fecha <= finPeriodo);
+    const pagosDelPeriodo = pagosPrestamo.filter(pg =>
+      pg.fecha > inicioPeriodo && pg.fecha <= finPeriodo
+    );
     const interesCobrado = pagosDelPeriodo.reduce((s, pg) => s + (pg.interesPagado || 0), 0);
     const capitalCobrado = pagosDelPeriodo.reduce((s, pg) => s + (pg.abonoCapital || 0), 0);
 
@@ -395,27 +512,107 @@ function renderResumenTabla(prestamoId) {
     } else if (pendienteAlCierre <= 0.005) {
       estado = "Al día";
     } else {
-      const mesesDeuda = interesDelMesPeriodo > 0.005 ? Math.max(1, Math.round(pendienteAlCierre / interesDelMesPeriodo)) : 1;
-      estado = `Debiendo ${mesesDeuda} mes(es) (${fmt(pendienteAlCierre)})`;
+      const mesesDeuda = interesDelMesPeriodo > 0.005
+        ? Math.max(1, Math.round(pendienteAlCierre / interesDelMesPeriodo))
+        : 1;
+      estado = `Debiendo ${mesesDeuda} mes(es)`;
     }
 
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${finPeriodo}</td>
-      <td class="mono">${fmt(capitalInicial)}</td>
-      <td class="mono">${fmt(interesDelMesPeriodo)}</td>
-      <td class="mono">${fmt(interesAtrasadoAntes)}</td>
-      <td class="mono">${fmt(interesCobrado)}</td>
-      <td class="mono">${fmt(capitalCobrado)}</td>
-      <td class="${estado.startsWith("Debiendo") ? "deuda-alerta" : ""}">${estado}</td>
-    `;
-    tbody.appendChild(tr);
+    meses.push({
+      finPeriodo,
+      capitalInicial,
+      interesDelMes: interesDelMesPeriodo,
+      interesAtrasado: interesAtrasadoAntes,
+      interesCobrado,
+      capitalCobrado,
+      pendienteInteres: pendienteAlCierre,
+      capitalPendiente: capitalPendienteAlCierre,
+      estado,
+      pagos: pagosDelPeriodo
+    });
   }
+  return meses;
 }
 
-document.getElementById("resumen-select-prestamo")?.addEventListener("change", e => {
-  renderResumenTabla(e.target.value);
-});
+function abrirDetalleMes(prestamoId, finPeriodo) {
+  const prestamo = db.prestamos.find(p => p.id === prestamoId);
+  if (!prestamo) return;
+  const cliente = db.clientes.find(c => c.id === prestamo.clienteId);
+  const meses = obtenerMesesGrid(prestamoId);
+  const mes = meses.find(m => m.finPeriodo === finPeriodo);
+  if (!mes) return;
+
+  const [anio, mesNum] = finPeriodo.split("-");
+  const nombreMes = nombreMesLargo(Number(mesNum));
+
+  document.getElementById("detalle-mes-titulo").textContent =
+    `Reporte de Cobros — ${nombreMes} ${anio}`;
+
+  const contenido = document.getElementById("detalle-mes-contenido");
+  contenido.innerHTML = `
+    <p class="hint" style="margin:0 0 12px">
+      Préstamo de <b>${cliente ? escapeHtml(cliente.nombre) : "?"}</b>
+      — ${fmt(prestamo.capitalOriginal)} al ${prestamo.tasa}%
+    </p>
+
+    <h4 class="detail-subtitle">Control Mensual</h4>
+    <div class="tabla-wrap">
+      <table class="tabla-historial detail-table">
+        <thead>
+          <tr>
+            <th>Capital inicial</th>
+            <th>Interés del mes</th>
+            <th>Interés atrasado</th>
+            <th>Cobrado interés</th>
+            <th>Cobrado capital</th>
+            <th>Capital restante</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">${fmt(mes.capitalInicial)}</td>
+            <td class="mono">${fmt(mes.interesDelMes)}</td>
+            <td class="mono">${fmt(mes.interesAtrasado)}</td>
+            <td class="mono">${fmt(mes.interesCobrado)}</td>
+            <td class="mono">${fmt(mes.capitalCobrado)}</td>
+            <td class="mono">${fmt(mes.capitalPendiente)}</td>
+            <td class="${mes.estado.startsWith("Debiendo") ? "deuda-alerta" : ""}">${mes.estado}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4 class="detail-subtitle">Transacciones del mes</h4>
+    <div class="tabla-wrap">
+      <table class="tabla-historial detail-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Interés pagado</th>
+            <th>Abono capital</th>
+            <th>Capital restante</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${mes.pagos.length === 0
+            ? `<tr><td colspan="4" class="hint">Sin pagos registrados este mes.</td></tr>`
+            : mes.pagos.map(pg => `
+              <tr>
+                <td>${pg.fecha}</td>
+                <td class="mono">${fmt(pg.interesPagado)}</td>
+                <td class="mono">${fmt(pg.abonoCapital)}</td>
+                <td class="mono">${fmt(pg.capitalPendienteDespues)}</td>
+              </tr>
+            `).join("")
+          }
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  abrirModal("modal-detalle-mes");
+}
 
 function renderTicketPrestamo(prestamo) {
   const saldado = prestamo.estado === "saldado";
@@ -465,6 +662,12 @@ function renderTicketPrestamo(prestamo) {
   btnHist.addEventListener("click", () => abrirHistorial(prestamo.id));
   acciones.appendChild(btnHist);
 
+  const btnEditarPrestamo = document.createElement("button");
+  btnEditarPrestamo.className = "btn btn-ghost btn-small";
+  btnEditarPrestamo.textContent = "Editar";
+  btnEditarPrestamo.addEventListener("click", () => abrirEditarPrestamo(prestamo.id));
+  acciones.appendChild(btnEditarPrestamo);
+
   const btnBorrarPrestamo = document.createElement("button");
   btnBorrarPrestamo.className = "btn btn-danger btn-small";
   btnBorrarPrestamo.textContent = "Borrar préstamo";
@@ -473,7 +676,27 @@ function renderTicketPrestamo(prestamo) {
 
   ticket.appendChild(stamp);
   ticket.appendChild(info);
+
+  const notaContainer = document.createElement("div");
+  notaContainer.className = "prestamo-nota-container";
+  if (prestamo.notas) {
+    notaContainer.innerHTML = `
+      <span class="prestamo-nota-texto">📝 ${escapeHtml(prestamo.notas)}</span>
+      <button class="prestamo-nota-editar" data-prestamo-id="${prestamo.id}">✏️</button>
+    `;
+  } else {
+    notaContainer.innerHTML = `
+      <button class="prestamo-nota-agregar" data-prestamo-id="${prestamo.id}">+ Agregar nota</button>
+    `;
+  }
+  ticket.appendChild(notaContainer);
+
   ticket.appendChild(acciones);
+
+  notaContainer.querySelectorAll(".prestamo-nota-editar, .prestamo-nota-agregar").forEach(btn => {
+    btn.addEventListener("click", () => editarNotaPrestamo(btn.dataset.prestamoId));
+  });
+
   return ticket;
 }
 
@@ -487,16 +710,23 @@ function escapeHtml(str) {
    CLIENTE: crear
    ========================================================= */
 document.getElementById("btn-nuevo-cliente").addEventListener("click", () => {
+  document.getElementById("editar-cliente-id").value = "";
   document.getElementById("input-nombre-cliente").value = "";
+  document.getElementById("modal-cliente-titulo").textContent = "Nuevo cliente";
   abrirModal("modal-cliente");
 });
 
 document.getElementById("btn-guardar-cliente").addEventListener("click", async () => {
   const nombre = document.getElementById("input-nombre-cliente").value.trim();
   if (!nombre) return;
+  const editarId = document.getElementById("editar-cliente-id").value;
   try {
-    const ref = doc(collection(dbFs, "clientes"));
-    await setDoc(ref, { nombre });
+    if (editarId) {
+      await updateDoc(doc(dbFs, "clientes", editarId), { nombre });
+    } else {
+      const ref = doc(collection(dbFs, "clientes"));
+      await setDoc(ref, { nombre });
+    }
     cerrarModal("modal-cliente");
   } catch (e) {
     alert("No se pudo guardar el cliente. Revisá tu conexión o la configuración de Firebase.");
@@ -504,14 +734,30 @@ document.getElementById("btn-guardar-cliente").addEventListener("click", async (
   }
 });
 
+function abrirEditarCliente(clienteId) {
+  const cliente = db.clientes.find(c => c.id === clienteId);
+  if (!cliente) return;
+  document.getElementById("editar-cliente-id").value = clienteId;
+  document.getElementById("input-nombre-cliente").value = cliente.nombre;
+  document.getElementById("modal-cliente-titulo").textContent = "Editar cliente";
+  abrirModal("modal-cliente");
+}
+
+document.getElementById("input-buscar-clientes")?.addEventListener("input", () => {
+  renderClientes();
+});
+
 /* =========================================================
    PRÉSTAMO: crear
    ========================================================= */
 function abrirModalPrestamo(clienteId) {
+  document.getElementById("editar-prestamo-id").value = "";
   document.getElementById("prestamo-cliente-id").value = clienteId;
   document.getElementById("input-capital-prestamo").value = "";
   document.getElementById("input-fecha-prestamo").value = hoyISO();
+  document.getElementById("input-nota-prestamo").value = "";
   setRateToggle("prestamo-rate-toggle", 8);
+  document.getElementById("modal-prestamo-titulo").textContent = "Nuevo préstamo";
   abrirModal("modal-prestamo");
 }
 
@@ -536,19 +782,35 @@ document.getElementById("btn-guardar-prestamo").addEventListener("click", async 
   const capital = parseFloat(document.getElementById("input-capital-prestamo").value);
   const fecha = document.getElementById("input-fecha-prestamo").value || hoyISO();
   const tasa = getRateToggle("prestamo-rate-toggle");
+  const notas = document.getElementById("input-nota-prestamo").value.trim();
+  const editarId = document.getElementById("editar-prestamo-id").value;
 
   if (!capital || capital <= 0) return;
 
   try {
-    const ref = doc(collection(dbFs, "prestamos"));
-    await setDoc(ref, {
-      clienteId,
-      capitalOriginal: capital,
-      capitalPendiente: capital,
-      tasa,
-      fecha,
-      estado: "activo"
-    });
+    if (editarId) {
+      const prestamo = db.prestamos.find(p => p.id === editarId);
+      const diffCapital = capital - (prestamo ? prestamo.capitalOriginal : capital);
+      const nuevoPendiente = Math.max(0, (prestamo ? prestamo.capitalPendiente : capital) + diffCapital);
+      await updateDoc(doc(dbFs, "prestamos", editarId), {
+        capitalOriginal: capital,
+        capitalPendiente: nuevoPendiente,
+        tasa,
+        fecha,
+        notas
+      });
+    } else {
+      const ref = doc(collection(dbFs, "prestamos"));
+      await setDoc(ref, {
+        clienteId,
+        capitalOriginal: capital,
+        capitalPendiente: capital,
+        tasa,
+        fecha,
+        estado: "activo",
+        notas
+      });
+    }
     cerrarModal("modal-prestamo");
   } catch (e) {
     alert("No se pudo guardar el préstamo. Revisá tu conexión o la configuración de Firebase.");
@@ -556,12 +818,83 @@ document.getElementById("btn-guardar-prestamo").addEventListener("click", async 
   }
 });
 
+function abrirEditarPrestamo(prestamoId) {
+  const prestamo = db.prestamos.find(p => p.id === prestamoId);
+  if (!prestamo) return;
+  document.getElementById("editar-prestamo-id").value = prestamoId;
+  document.getElementById("prestamo-cliente-id").value = prestamo.clienteId;
+  document.getElementById("input-capital-prestamo").value = prestamo.capitalOriginal;
+  document.getElementById("input-fecha-prestamo").value = prestamo.fecha;
+  document.getElementById("input-nota-prestamo").value = prestamo.notas || "";
+  setRateToggle("prestamo-rate-toggle", prestamo.tasa);
+  document.getElementById("modal-prestamo-titulo").textContent = "Editar préstamo";
+  abrirModal("modal-prestamo");
+}
+
+async function editarNotaPrestamo(prestamoId) {
+  const prestamo = db.prestamos.find(p => p.id === prestamoId);
+  if (!prestamo) return;
+  const nuevaNota = prompt("Nota / Observaciones del préstamo:", prestamo.notas || "");
+  if (nuevaNota === null) return;
+  try {
+    await updateDoc(doc(dbFs, "prestamos", prestamoId), { notas: nuevaNota.trim() });
+  } catch (e) {
+    alert("No se pudo guardar la nota.");
+    console.error(e);
+  }
+}
+
+function abrirEditarPagoMes(prestamoId, finPeriodo) {
+  const prestamo = db.prestamos.find(p => p.id === prestamoId);
+  if (!prestamo) return;
+
+  const pagosMes = db.pagos.filter(pg =>
+    pg.prestamoId === prestamoId &&
+    pg.fecha > (() => {
+      const partes = finPeriodo.split("-");
+      const d = new Date(Number(partes[0]), Number(partes[1]) - 1, 1);
+      d.setMonth(d.getMonth() - 1);
+      return d.toISOString().slice(0, 10);
+    })() &&
+    pg.fecha <= finPeriodo
+  );
+
+  const [anio, mesNum] = finPeriodo.split("-");
+  const nombreMes = nombreMesLargo(Number(mesNum));
+
+  document.getElementById("pago-prestamo-id").value = prestamoId;
+
+  if (pagosMes.length > 0) {
+    const pago = pagosMes[0];
+    document.getElementById("editar-pago-id").value = pago.id;
+    document.getElementById("input-fecha-pago").value = pago.fecha;
+    document.getElementById("input-interes-pago").value = pago.interesPagado;
+    document.getElementById("input-capital-pago").value = pago.abonoCapital;
+    document.getElementById("modal-pago-titulo").textContent = `Editar pago — ${nombreMes} ${anio}`;
+  } else {
+    document.getElementById("editar-pago-id").value = "";
+    document.getElementById("input-fecha-pago").value = finPeriodo;
+    document.getElementById("input-interes-pago").value = "";
+    document.getElementById("input-capital-pago").value = "0";
+    document.getElementById("modal-pago-titulo").textContent = `Registrar pago — ${nombreMes} ${anio}`;
+  }
+
+  document.getElementById("pago-resumen").innerHTML = `
+    Préstamo de <b>${fmt(prestamo.capitalOriginal)} al ${prestamo.tasa}%</b><br>
+    Capital pendiente actual: <b>${fmt(prestamo.capitalPendiente)}</b>
+  `;
+  abrirModal("modal-pago");
+}
+
 /* =========================================================
    PAGO: registrar
    ========================================================= */
 function abrirModalPago(prestamoId) {
   const prestamo = db.prestamos.find(p => p.id === prestamoId);
   if (!prestamo) return;
+
+  document.getElementById("editar-pago-id").value = "";
+  document.getElementById("modal-pago-titulo").textContent = "Registrar pago de mes";
 
   const acumulado = calcularInteresAcumulado(prestamo, hoyISO());
   const etiquetaMeses = acumulado.mesesAtrasados > 1 ? ` (${acumulado.mesesAtrasados} meses)` : "";
@@ -585,32 +918,60 @@ document.getElementById("btn-guardar-pago").addEventListener("click", async () =
   const fecha = document.getElementById("input-fecha-pago").value || hoyISO();
   const interesPagado = parseFloat(document.getElementById("input-interes-pago").value) || 0;
   const abonoCapital = parseFloat(document.getElementById("input-capital-pago").value) || 0;
+  const editarPagoId = document.getElementById("editar-pago-id").value;
   const acumuladoAlMomento = calcularInteresAcumulado(prestamo, fecha);
 
-  const capitalAntes = prestamo.capitalPendiente;
-  const nuevoPendiente = Math.max(0, capitalAntes - abonoCapital);
-  const nuevoEstado = nuevoPendiente === 0 ? "saldado" : "activo";
+  if (editarPagoId) {
+    const pagoViejo = db.pagos.find(pg => pg.id === editarPagoId);
+    const diffCapital = abonoCapital - (pagoViejo ? pagoViejo.abonoCapital : 0);
+    const diffInteres = interesPagado - (pagoViejo ? pagoViejo.interesPagado : 0);
+    const capitalAntes = prestamo.capitalOriginal - db.pagos
+      .filter(pg => pg.prestamoId === prestamoId && pg.id !== editarPagoId)
+      .reduce((s, pg) => s + (pg.abonoCapital || 0), 0);
+    const nuevoPendiente = Math.max(0, capitalAntes - abonoCapital);
+    const nuevoEstado = nuevoPendiente === 0 ? "saldado" : "activo";
 
-  try {
-    await updateDoc(doc(dbFs, "prestamos", prestamoId), {
-      capitalPendiente: nuevoPendiente,
-      estado: nuevoEstado
-    });
+    try {
+      await updateDoc(doc(dbFs, "prestamos", prestamoId), {
+        capitalPendiente: nuevoPendiente,
+        estado: nuevoEstado
+      });
+      await updateDoc(doc(dbFs, "pagos", editarPagoId), {
+        fecha,
+        interesCalculado: acumuladoAlMomento.pendiente,
+        interesPagado,
+        abonoCapital,
+        capitalPendienteDespues: nuevoPendiente
+      });
+      cerrarModal("modal-pago");
+    } catch (e) {
+      alert("No se pudo editar el pago. Revisá tu conexión.");
+      console.error(e);
+    }
+  } else {
+    const capitalAntes = prestamo.capitalPendiente;
+    const nuevoPendiente = Math.max(0, capitalAntes - abonoCapital);
+    const nuevoEstado = nuevoPendiente === 0 ? "saldado" : "activo";
 
-    const pagoRef = doc(collection(dbFs, "pagos"));
-    await setDoc(pagoRef, {
-      prestamoId,
-      fecha,
-      interesCalculado: acumuladoAlMomento.pendiente,
-      interesPagado,
-      abonoCapital,
-      capitalPendienteDespues: nuevoPendiente
-    });
-
-    cerrarModal("modal-pago");
-  } catch (e) {
-    alert("No se pudo registrar el pago. Revisá tu conexión o la configuración de Firebase.");
-    console.error(e);
+    try {
+      await updateDoc(doc(dbFs, "prestamos", prestamoId), {
+        capitalPendiente: nuevoPendiente,
+        estado: nuevoEstado
+      });
+      const pagoRef = doc(collection(dbFs, "pagos"));
+      await setDoc(pagoRef, {
+        prestamoId,
+        fecha,
+        interesCalculado: acumuladoAlMomento.pendiente,
+        interesPagado,
+        abonoCapital,
+        capitalPendienteDespues: nuevoPendiente
+      });
+      cerrarModal("modal-pago");
+    } catch (e) {
+      alert("No se pudo registrar el pago. Revisá tu conexión o la configuración de Firebase.");
+      console.error(e);
+    }
   }
 });
 
