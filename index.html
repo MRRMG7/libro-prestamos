@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Libro de Préstamos</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -13,6 +11,7 @@
 <!-- ===== PANTALLA DE ACCESO ===== -->
 <div class="login-screen" id="login-screen">
   <div class="login-box">
+    <button class="btn-theme btn-theme-login" id="btn-tema-login" title="Cambiar tema">🌙</button>
     <span class="cover-eyebrow">Cuenta al día</span>
     <h1 class="cover-title" style="color:#202B23;">Libro de Préstamos</h1>
     <p class="hint">Acceso solo para la familia.</p>
@@ -36,7 +35,10 @@
       <h1 class="cover-title">Libro de Préstamos</h1>
       <p class="cover-sub">Capital, interés y abonos — todo en un solo lugar.</p>
       <p class="cover-sync" id="sync-status">Conectando…</p>
-      <button class="btn-logout" id="btn-logout" hidden>Cerrar sesión</button>
+      <div class="cover-actions">
+        <button class="btn-logout" id="btn-logout" hidden>Cerrar sesión</button>
+        <button class="btn-theme" id="btn-tema" title="Cambiar tema">🌙</button>
+      </div>
     </div>
     <div class="cover-totals" id="cover-totals">
       <div class="total-box">
@@ -51,12 +53,17 @@
         <span class="total-label">Préstamos activos</span>
         <span class="total-value mono" id="total-prestamos">0</span>
       </div>
+      <div class="total-box fondos-total">
+        <span class="total-label">Capital disponible</span>
+        <span class="total-value mono" id="total-capital-disponible">$0.00</span>
+      </div>
     </div>
   </header>
 
   <nav class="tabs" role="tablist">
     <button class="tab active" data-tab="clientes">Clientes</button>
     <button class="tab" data-tab="resumen">Resumen</button>
+    <button class="tab" data-tab="fondos">Fondos</button>
     <button class="tab" data-tab="calculadora">Calculadora</button>
     <button class="tab" data-tab="datos">Datos</button>
   </nav>
@@ -103,6 +110,52 @@
       <div id="resumen-grid" class="resumen-grid"></div>
     </div>
   </section>
+
+  <!-- ===== TAB: FONDOS ===== -->
+  <section class="panel" id="tab-fondos">
+    <div class="panel-head">
+      <h2>Capital por dueño</h2>
+      <button class="btn btn-primary" id="btn-nuevo-retiro">+ Sacar del capital</button>
+    </div>
+
+    <div class="fondos-resumen" id="fondos-resumen"></div>
+
+    <p class="empty-hint" id="empty-fondos" hidden>
+      Todavía no hay préstamos para mostrar.
+    </p>
+
+    <h3 class="retiros-titulo">Sacadas del capital</h3>
+    <div id="retiros-lista" class="retiros-lista"></div>
+  </section>
+
+  <!-- ===== MODAL: retirar capital ===== -->
+  <div class="modal" id="modal-retiro">
+    <div class="modal-box">
+      <h3 id="modal-retiro-titulo">Sacar del capital</h3>
+      <input type="hidden" id="editar-retiro-id">
+      <label>Dueño
+        <select id="input-dueno-retiro">
+          <option value="Papa">Papa</option>
+          <option value="Mauricio">Mauricio</option>
+          <option value="Adela">Adela</option>
+          <option value="Moises">Moises</option>
+        </select>
+      </label>
+      <label>Monto retirado
+        <input type="number" id="input-monto-retiro" placeholder="100.00" min="0" step="0.01">
+      </label>
+      <label>Fecha
+        <input type="date" id="input-fecha-retiro">
+      </label>
+      <label>Nota / Motivo
+        <input type="text" id="input-nota-retiro" placeholder="Ej: compré mercadería, gasto personal…">
+      </label>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" data-close-modal>Cancelar</button>
+        <button class="btn btn-primary" id="btn-guardar-retiro">Guardar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ===== TAB: CALCULADORA ===== -->
   <section class="panel" id="tab-calculadora">
@@ -210,6 +263,14 @@
     <label>Nota / Observaciones
       <input type="text" id="input-nota-prestamo" placeholder="Ej: Paga los 15, dejó garantía, etc.">
     </label>
+    <label>Dueño del capital
+      <select id="input-dueno-prestamo">
+        <option value="Papa">Papa</option>
+        <option value="Mauricio">Mauricio</option>
+        <option value="Adela">Adela</option>
+        <option value="Moises">Moises</option>
+      </select>
+    </label>
     <div class="modal-actions">
       <button class="btn btn-ghost" data-close-modal>Cancelar</button>
       <button class="btn btn-primary" id="btn-guardar-prestamo">Prestar</button>
@@ -252,6 +313,7 @@
             <th>Interés cobrado</th>
             <th>Abono capital</th>
             <th>Capital pendiente</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="historial-body"></tbody>
