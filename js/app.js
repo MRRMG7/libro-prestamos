@@ -22,6 +22,7 @@ import {
   getAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  sendPasswordResetEmail,
   signOut
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { firebaseConfig } from "./firebase-config.js";
@@ -143,20 +144,90 @@ onAuthStateChanged(auth, user => {
   }
 });
 
+function mostrarLoginFeedback(mensaje, tipo = "error") {
+  const feedback = document.getElementById("login-feedback");
+  feedback.textContent = mensaje;
+  feedback.dataset.tipo = tipo;
+  feedback.hidden = false;
+}
+
+function validarCorreoLogin() {
+  const input = document.getElementById("login-email");
+  const email = input.value.trim();
+  if (!email) {
+    mostrarLoginFeedback("Escribí tu correo para continuar.");
+    input.focus();
+    return "";
+  }
+  if (!input.validity.valid) {
+    mostrarLoginFeedback("Revisá que el correo tenga un formato válido.");
+    input.focus();
+    return "";
+  }
+  return email;
+}
+
+function mensajeErrorLogin(error) {
+  const mensajes = {
+    "auth/invalid-credential": "El correo o la contraseña no son correctos.",
+    "auth/user-not-found": "No encontramos una cuenta con ese correo.",
+    "auth/wrong-password": "El correo o la contraseña no son correctos.",
+    "auth/invalid-email": "Revisá el formato del correo.",
+    "auth/too-many-requests": "Hubo demasiados intentos. Esperá un momento y probá de nuevo.",
+    "auth/network-request-failed": "No se pudo conectar. Revisá tu conexión e intentá de nuevo.",
+    "auth/unauthorized-domain": "Este sitio no está autorizado en Firebase Authentication. Agregá mrrmg7.github.io en Dominios autorizados."
+  };
+  return mensajes[error.code] || "No se pudo iniciar sesión. Revisá tus datos e intentá de nuevo.";
+}
+
 document.getElementById("btn-login").addEventListener("click", async () => {
-  const email = document.getElementById("login-email").value.trim();
+  const email = validarCorreoLogin();
+  if (!email) return;
   const password = document.getElementById("login-password").value;
-  const errorEl = document.getElementById("login-error");
-  errorEl.hidden = true;
+  if (!password) {
+    mostrarLoginFeedback("Escribí tu contraseña para continuar.");
+    document.getElementById("login-password").focus();
+    return;
+  }
 
-  if (!email || !password) return;
-
+  const btn = document.getElementById("btn-login");
+  btn.disabled = true;
   try {
     await signInWithEmailAndPassword(auth, email, password);
+    document.getElementById("login-feedback").hidden = true;
   } catch (e) {
     console.error(e);
-    errorEl.textContent = `Error: ${e.code || e.message}`;
-    errorEl.hidden = false;
+    mostrarLoginFeedback(mensajeErrorLogin(e));
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("btn-recuperar-password").addEventListener("click", async () => {
+  const email = validarCorreoLogin();
+  if (!email) return;
+
+  const btn = document.getElementById("btn-recuperar-password");
+  btn.disabled = true;
+  try {
+    await sendPasswordResetEmail(auth, email);
+    mostrarLoginFeedback(
+      "Si existe una cuenta con ese correo, Firebase enviará un enlace para restablecer la contraseña. Revisá también Spam.",
+      "success"
+    );
+  } catch (e) {
+    console.error(e);
+    const mensajes = {
+      "auth/invalid-email": "Revisá el formato del correo.",
+      "auth/user-not-found": "No encontramos una cuenta con ese correo.",
+      "auth/too-many-requests": "Hubo demasiados intentos. Esperá un momento y probá de nuevo.",
+      "auth/network-request-failed": "No se pudo conectar. Revisá tu conexión e intentá de nuevo.",
+      "auth/unauthorized-domain": "Este sitio no está autorizado en Firebase Authentication. Agregá mrrmg7.github.io en Dominios autorizados.",
+      "auth/operation-not-allowed": "La recuperación por correo no está habilitada para este proyecto de Firebase."
+    };
+    mostrarLoginFeedback(mensajes[e.code] || "No se pudo enviar el enlace. Revisá la configuración de Firebase e intentá de nuevo.");
+  } finally {
+    btn.disabled = false;
   }
 });
 

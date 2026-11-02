@@ -100,6 +100,12 @@ Si ya le compartiste el link a alguien más (amigos, etc.) y ahora querés que *
 
 Desde ese momento, cualquiera que abra el link (tus amigos incluidos) solo va a ver la pantalla de acceso pidiendo correo y contraseña, y sin la clave no pueden ver ni modificar nada. Vos, mamá y papá entran una vez con la clave desde cada celular y el navegador los mantiene conectados (no hay que volver a escribirla cada vez, salvo que le den a "Cerrar sesión" o borren los datos del navegador).
 
+### Recuperar una contraseña olvidada
+
+En la pantalla de acceso, escribí el correo de la cuenta y elegí **¿Olvidaste tu contraseña?**. Firebase enviará un enlace a ese correo para crear una contraseña nueva. El correo debe ser una cuenta real a la que tengas acceso; si se registró con un correo inventado, no podrá recibir el enlace.
+
+Para que el login y la recuperación funcionen desde GitHub Pages, en Firebase Console abrí **Authentication → Settings → Authorized domains** y agregá `mrrmg7.github.io`.
+
 ## Estructura de archivos
 
 ```

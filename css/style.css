@@ -99,11 +99,24 @@ html, body {
 }
 .btn-theme-login:hover { background: var(--bg-raised); }
 .login-box .cover-title { margin: 2px 0 0; font-size: 26px; }
-.login-error {
+.login-feedback {
   color: var(--red);
   font-size: 13px;
   margin: 0;
 }
+.login-feedback[data-tipo="success"] { color: var(--green); }
+.login-link {
+  align-self: center;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.login-link:hover { color: var(--accent-hover); text-decoration: underline; }
+.login-link:disabled { opacity: .6; cursor: wait; }
 .btn-logout {
   background: transparent;
   border: 1px solid var(--line);
